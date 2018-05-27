@@ -26,8 +26,8 @@ static_resources:
             - name: local_service
               domains: ["*"]
               routes:
-              - match: { prefix: "/robots.txt" }
-                route: { host_rewrite: www.bbc.com, cluster: service_bbc }
+              - match: { regex: ".*" }
+                route: { host_rewrite: www.bbc.com, cluster: service_bbc, prefix_rewrite: "/robots.txt" }
           http_filters:
           - name: envoy.router  
 

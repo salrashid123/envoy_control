@@ -128,7 +128,7 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 ```golang
 		var listenerName = "listener_0"
 		var targetHost = "www.bbc.com"
-		var targetPrefix = "/robots.txt"
+		var targetRegex = "/*"
 		var virtualHostName = "local_service"
 		var routeConfigName = "local_route"
 
@@ -140,8 +140,8 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 
 			Routes: []route.Route{{
 				Match: route.RouteMatch{
-					PathSpecifier: &route.RouteMatch_Prefix{
-						Prefix: targetPrefix,
+					PathSpecifier: &route.RouteMatch_Regex{
+						Regex: targetRegex,
 					},
 				},
 				Action: &route.Route_Route{
@@ -152,6 +152,7 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 						ClusterSpecifier: &route.RouteAction_Cluster{
 							Cluster: clusterName,
 						},
+						PrefixRewrite: "/robots.txt",
 					},
 				},
 			}}}
@@ -388,8 +389,8 @@ static_resources:
             - name: local_service
               domains: ["*"]
               routes:
-              - match: { prefix: "/robots.txt" }
-                route: { host_rewrite: www.bbc.com, cluster: service_bbc }
+              - match: { regex: ".*" }
+                route: { host_rewrite: www.bbc.com, cluster: service_bbc, prefix_rewrite: "/robots.txt" }
           http_filters:
           - name: envoy.router
           access_log: 

@@ -272,7 +272,7 @@ func main() {
 		// =================================================================================
 		var listenerName = "listener_0"
 		var targetHost = "www.bbc.com"
-		var targetPrefix = "/robots.txt"
+		var targetRegex = "/*"
 		var virtualHostName = "local_service"
 		var routeConfigName = "local_route"
 
@@ -284,8 +284,8 @@ func main() {
 
 			Routes: []route.Route{{
 				Match: route.RouteMatch{
-					PathSpecifier: &route.RouteMatch_Prefix{
-						Prefix: targetPrefix,
+					PathSpecifier: &route.RouteMatch_Regex{
+						Regex: targetRegex,
 					},
 				},
 				Action: &route.Route_Route{
@@ -296,6 +296,7 @@ func main() {
 						ClusterSpecifier: &route.RouteAction_Cluster{
 							Cluster: clusterName,
 						},
+						PrefixRewrite: "/robots.txt",
 					},
 				},
 			}}}
