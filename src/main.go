@@ -13,6 +13,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	v2 "github.com/envoyproxy/go-control-plane/envoy/api/v2"
+	auth "github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
+	core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
+	listener "github.com/envoyproxy/go-control-plane/envoy/api/v2/listener"
+	v2route "github.com/envoyproxy/go-control-plane/envoy/api/v2/route"
+
 	myals "accesslogs"
 
 	"github.com/envoyproxy/go-control-plane/pkg/cache"
@@ -21,16 +27,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 
-	"github.com/envoyproxy/go-control-plane/envoy/api/v2"
-	"github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
-	"github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
-	"github.com/envoyproxy/go-control-plane/envoy/api/v2/listener"
-	"github.com/envoyproxy/go-control-plane/envoy/api/v2/route"
 	accesslog "github.com/envoyproxy/go-control-plane/envoy/service/accesslog/v2"
 	discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v2"
 
 	hcm "github.com/envoyproxy/go-control-plane/envoy/config/filter/network/http_connection_manager/v2"
-	"github.com/envoyproxy/go-control-plane/pkg/util"
+
+	"github.com/envoyproxy/go-control-plane/pkg/wellknown"
+	"github.com/golang/protobuf/ptypes"
 )
 
 var (
@@ -79,13 +82,14 @@ func (cb *callbacks) Report() {
 	defer cb.mu.Unlock()
 	log.WithFields(log.Fields{"fetches": cb.fetches, "requests": cb.requests}).Info("cb.Report()  callbacks")
 }
-func (cb *callbacks) OnStreamOpen(id int64, typ string) {
+func (cb *callbacks) OnStreamOpen(ctx context.Context, id int64, typ string) error {
 	log.Infof("OnStreamOpen %d open for %s", id, typ)
+	return nil
 }
 func (cb *callbacks) OnStreamClosed(id int64) {
 	log.Infof("OnStreamClosed %d closed", id)
 }
-func (cb *callbacks) OnStreamRequest(int64, *v2.DiscoveryRequest) {
+func (cb *callbacks) OnStreamRequest(int64, *v2.DiscoveryRequest) error {
 	log.Infof("OnStreamRequest")
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
@@ -94,12 +98,13 @@ func (cb *callbacks) OnStreamRequest(int64, *v2.DiscoveryRequest) {
 		close(cb.signal)
 		cb.signal = nil
 	}
+	return nil
 }
 func (cb *callbacks) OnStreamResponse(int64, *v2.DiscoveryRequest, *v2.DiscoveryResponse) {
 	log.Infof("OnStreamResponse...")
 	cb.Report()
 }
-func (cb *callbacks) OnFetchRequest(req *v2.DiscoveryRequest) {
+func (cb *callbacks) OnFetchRequest(ctx context.Context, req *v2.DiscoveryRequest) error {
 	log.Infof("OnFetchRequest...")
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
@@ -108,6 +113,7 @@ func (cb *callbacks) OnFetchRequest(req *v2.DiscoveryRequest) {
 		close(cb.signal)
 		cb.signal = nil
 	}
+	return nil
 }
 func (cb *callbacks) OnFetchResponse(*v2.DiscoveryRequest, *v2.DiscoveryResponse) {}
 
@@ -191,9 +197,6 @@ func RunManagementGateway(ctx context.Context, srv xds.Server, port uint) {
 			log.Error(err)
 		}
 	}()
-	if err := server.Shutdown(ctx); err != nil {
-		log.Error(err)
-	}
 }
 
 func main() {
@@ -236,7 +239,7 @@ func main() {
 
 	for {
 		atomic.AddInt32(&version, 1)
-		nodeId := config.GetStatusKeys()[1]
+		nodeId := config.GetStatusKeys()[0]
 
 		var clusterName = "service_bbc"
 		var remoteHost = "www.bbc.com"
@@ -248,7 +251,7 @@ func main() {
 		h := &core.Address{Address: &core.Address_SocketAddress{
 			SocketAddress: &core.SocketAddress{
 				Address:  remoteHost,
-				Protocol: core.TCP,
+				Protocol: core.SocketAddress_TCP,
 				PortSpecifier: &core.SocketAddress_PortValue{
 					PortValue: uint32(443),
 				},
@@ -257,12 +260,12 @@ func main() {
 
 		c := []cache.Resource{
 			&v2.Cluster{
-				Name:            clusterName,
-				ConnectTimeout:  2 * time.Second,
-				Type:            v2.Cluster_LOGICAL_DNS,
-				DnsLookupFamily: v2.Cluster_V4_ONLY,
-				LbPolicy:        v2.Cluster_ROUND_ROBIN,
-				Hosts:           []*core.Address{h},
+				Name:                 clusterName,
+				ConnectTimeout:       ptypes.DurationProto(2 * time.Second),
+				ClusterDiscoveryType: &v2.Cluster_Type{Type: v2.Cluster_LOGICAL_DNS},
+				DnsLookupFamily:      v2.Cluster_V4_ONLY,
+				LbPolicy:             v2.Cluster_ROUND_ROBIN,
+				Hosts:                []*core.Address{h},
 				TlsContext: &auth.UpstreamTlsContext{
 					Sni: sni,
 				},
@@ -278,22 +281,22 @@ func main() {
 
 		log.Infof(">>>>>>>>>>>>>>>>>>> creating listener " + listenerName)
 
-		v := route.VirtualHost{
+		v := v2route.VirtualHost{
 			Name:    virtualHostName,
 			Domains: []string{"*"},
 
-			Routes: []route.Route{{
-				Match: route.RouteMatch{
-					PathSpecifier: &route.RouteMatch_Regex{
+			Routes: []*v2route.Route{{
+				Match: &v2route.RouteMatch{
+					PathSpecifier: &v2route.RouteMatch_Regex{
 						Regex: targetRegex,
 					},
 				},
-				Action: &route.Route_Route{
-					Route: &route.RouteAction{
-						HostRewriteSpecifier: &route.RouteAction_HostRewrite{
+				Action: &v2route.Route_Route{
+					Route: &v2route.RouteAction{
+						HostRewriteSpecifier: &v2route.RouteAction_HostRewrite{
 							HostRewrite: targetHost,
 						},
-						ClusterSpecifier: &route.RouteAction_Cluster{
+						ClusterSpecifier: &v2route.RouteAction_Cluster{
 							Cluster: clusterName,
 						},
 						PrefixRewrite: "/robots.txt",
@@ -302,19 +305,20 @@ func main() {
 			}}}
 
 		manager := &hcm.HttpConnectionManager{
-			CodecType:  hcm.AUTO,
+			CodecType:  hcm.HttpConnectionManager_AUTO,
 			StatPrefix: "ingress_http",
 			RouteSpecifier: &hcm.HttpConnectionManager_RouteConfig{
 				RouteConfig: &v2.RouteConfiguration{
 					Name:         routeConfigName,
-					VirtualHosts: []route.VirtualHost{v},
+					VirtualHosts: []*v2route.VirtualHost{&v},
 				},
 			},
 			HttpFilters: []*hcm.HttpFilter{{
-				Name: util.Router,
+				Name: wellknown.Router,
 			}},
 		}
-		pbst, err := util.MessageToStruct(manager)
+
+		pbst, err := ptypes.MarshalAny(manager)
 		if err != nil {
 			panic(err)
 		}
@@ -322,10 +326,10 @@ func main() {
 		var l = []cache.Resource{
 			&v2.Listener{
 				Name: listenerName,
-				Address: core.Address{
+				Address: &core.Address{
 					Address: &core.Address_SocketAddress{
 						SocketAddress: &core.SocketAddress{
-							Protocol: core.TCP,
+							Protocol: core.SocketAddress_TCP,
 							Address:  localhost,
 							PortSpecifier: &core.SocketAddress_PortValue{
 								PortValue: 10000,
@@ -333,10 +337,12 @@ func main() {
 						},
 					},
 				},
-				FilterChains: []listener.FilterChain{{
-					Filters: []listener.Filter{{
-						Name:   util.HTTPConnectionManager,
-						Config: pbst,
+				FilterChains: []*listener.FilterChain{{
+					Filters: []*listener.Filter{{
+						Name: wellknown.HTTPConnectionManager,
+						ConfigType: &listener.Filter_TypedConfig{
+							TypedConfig: pbst,
+						},
 					}},
 				}},
 			}}
@@ -344,7 +350,7 @@ func main() {
 		// =================================================================================
 
 		log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(version))
-		snap := cache.NewSnapshot(fmt.Sprint(version), nil, c, nil, l)
+		snap := cache.NewSnapshot(fmt.Sprint(version), nil, c, nil, l, nil)
 
 		config.SetSnapshot(nodeId, snap)
 
