@@ -41,21 +41,21 @@ cd envoy_control
 export GOPATH=`pwd`
 
 
-go get  github.com/envoyproxy/go-control-plane/envoy/api/v2 \ 
-   github.com/envoyproxy/go-control-plane/envoy/api/v2 \ 
-   github.com/envoyproxy/go-control-plane/envoy/api/v2/auth \ 
-   github.com/envoyproxy/go-control-plane/envoy/api/v2/core \ 
-   github.com/envoyproxy/go-control-plane/envoy/api/v2/listener \ 
-   github.com/envoyproxy/go-control-plane/envoy/api/v2/route \ 
-   github.com/envoyproxy/go-control-plane/envoy/config/filter/accesslog/v2 \ 
-   github.com/envoyproxy/go-control-plane/envoy/config/filter/network/http_connection_manager/v2 \ 
-   github.com/envoyproxy/go-control-plane/envoy/service/accesslog/v2 \ 
-   github.com/envoyproxy/go-control-plane/envoy/service/discovery/v2 \ 
-   github.com/envoyproxy/go-control-plane/pkg/cache \ 
-   github.com/envoyproxy/go-control-plane/pkg/server \ 
-   github.com/envoyproxy/go-control-plane/pkg/util \ 
-   github.com/sirupsen/logrus \ 
-   google.golang.org/grpc
+go get github.com/envoyproxy/go-control-plane/envoy/api/v2 \
+  github.com/envoyproxy/go-control-plane/envoy/api/v2/auth \
+  github.com/envoyproxy/go-control-plane/envoy/api/v2/core \
+  github.com/envoyproxy/go-control-plane/envoy/api/v2/listener \
+  github.com/envoyproxy/go-control-plane/envoy/api/v2/route \
+  github.com/envoyproxy/go-control-plane/envoy/config/filter/network/http_connection_manager/v2 \
+  github.com/envoyproxy/go-control-plane/envoy/data/accesslog/v2 \
+  github.com/envoyproxy/go-control-plane/envoy/service/accesslog/v2 \
+  github.com/envoyproxy/go-control-plane/envoy/service/discovery/v2 \
+  github.com/envoyproxy/go-control-plane/pkg/cache \
+  github.com/envoyproxy/go-control-plane/pkg/server \
+  github.com/envoyproxy/go-control-plane/pkg/wellknown \
+  github.com/golang/protobuf/ptypes \
+  github.com/sirupsen/logrus \
+  google.golang.org/grpc
 ```
 
 
@@ -97,12 +97,10 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 		var sni = "www.bbc.com"
 		log.Infof(">>>>>>>>>>>>>>>>>>> creating cluster " + clusterName)
 
-		//c := []cache.Resource{resource.MakeCluster(resource.Ads, clusterName)}
-
 		h := &core.Address{Address: &core.Address_SocketAddress{
 			SocketAddress: &core.SocketAddress{
 				Address:  remoteHost,
-				Protocol: core.TCP,
+				Protocol: core.SocketAddress_TCP,
 				PortSpecifier: &core.SocketAddress_PortValue{
 					PortValue: uint32(443),
 				},
@@ -111,12 +109,12 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 
 		c := []cache.Resource{
 			&v2.Cluster{
-				Name:            clusterName,
-				ConnectTimeout:  2 * time.Second,
-				Type:            v2.Cluster_LOGICAL_DNS,
-				DnsLookupFamily: v2.Cluster_V4_ONLY,
-				LbPolicy:        v2.Cluster_ROUND_ROBIN,
-				Hosts:           []*core.Address{h},
+				Name:                 clusterName,
+				ConnectTimeout:       ptypes.DurationProto(2 * time.Second),
+				ClusterDiscoveryType: &v2.Cluster_Type{Type: v2.Cluster_LOGICAL_DNS},
+				DnsLookupFamily:      v2.Cluster_V4_ONLY,
+				LbPolicy:             v2.Cluster_ROUND_ROBIN,
+				Hosts:                []*core.Address{h},
 				TlsContext: &auth.UpstreamTlsContext{
 					Sni: sni,
 				},
@@ -134,22 +132,22 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 
 		log.Infof(">>>>>>>>>>>>>>>>>>> creating listener " + listenerName)
 
-		v := route.VirtualHost{
+		v := v2route.VirtualHost{
 			Name:    virtualHostName,
 			Domains: []string{"*"},
 
-			Routes: []route.Route{{
-				Match: route.RouteMatch{
-					PathSpecifier: &route.RouteMatch_Regex{
+			Routes: []*v2route.Route{{
+				Match: &v2route.RouteMatch{
+					PathSpecifier: &v2route.RouteMatch_Regex{
 						Regex: targetRegex,
 					},
 				},
-				Action: &route.Route_Route{
-					Route: &route.RouteAction{
-						HostRewriteSpecifier: &route.RouteAction_HostRewrite{
+				Action: &v2route.Route_Route{
+					Route: &v2route.RouteAction{
+						HostRewriteSpecifier: &v2route.RouteAction_HostRewrite{
 							HostRewrite: targetHost,
 						},
-						ClusterSpecifier: &route.RouteAction_Cluster{
+						ClusterSpecifier: &v2route.RouteAction_Cluster{
 							Cluster: clusterName,
 						},
 						PrefixRewrite: "/robots.txt",
@@ -158,19 +156,20 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 			}}}
 
 		manager := &hcm.HttpConnectionManager{
-			CodecType:  hcm.AUTO,
+			CodecType:  hcm.HttpConnectionManager_AUTO,
 			StatPrefix: "ingress_http",
 			RouteSpecifier: &hcm.HttpConnectionManager_RouteConfig{
 				RouteConfig: &v2.RouteConfiguration{
 					Name:         routeConfigName,
-					VirtualHosts: []route.VirtualHost{v},
+					VirtualHosts: []*v2route.VirtualHost{&v},
 				},
 			},
 			HttpFilters: []*hcm.HttpFilter{{
-				Name: util.Router,
+				Name: wellknown.Router,
 			}},
 		}
-		pbst, err := util.MessageToStruct(manager)
+
+		pbst, err := ptypes.MarshalAny(manager)
 		if err != nil {
 			panic(err)
 		}
@@ -178,10 +177,10 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 		var l = []cache.Resource{
 			&v2.Listener{
 				Name: listenerName,
-				Address: core.Address{
+				Address: &core.Address{
 					Address: &core.Address_SocketAddress{
 						SocketAddress: &core.SocketAddress{
-							Protocol: core.TCP,
+							Protocol: core.SocketAddress_TCP,
 							Address:  localhost,
 							PortSpecifier: &core.SocketAddress_PortValue{
 								PortValue: 10000,
@@ -189,10 +188,12 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 						},
 					},
 				},
-				FilterChains: []listener.FilterChain{{
-					Filters: []listener.Filter{{
-						Name:   util.HTTPConnectionManager,
-						Config: pbst,
+				FilterChains: []*listener.FilterChain{{
+					Filters: []*listener.Filter{{
+						Name: wellknown.HTTPConnectionManager,
+						ConfigType: &listener.Filter_TypedConfig{
+							TypedConfig: pbst,
+						},
 					}},
 				}},
 			}}
@@ -201,7 +202,7 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 #### Commit Snapshot
 
 ```golang
-		snap := cache.NewSnapshot(fmt.Sprint(version), nil, c, nil, l)
+		snap := cache.NewSnapshot(fmt.Sprint(version), nil, c, nil, l, nil)
 		config.SetSnapshot(nodeId, snap)
 ```
 
@@ -215,34 +216,46 @@ $ envoy -c baseline.yaml --v2-config-only -l info
 
 - [baseline.yaml](baseline.yaml)
 ```yaml
+admin:
+  access_log_path: /dev/null
+  address:
+    socket_address:
+      address: 127.0.0.1
+      port_value: 9000
+
 dynamic_resources:
   ads_config:
     api_type: GRPC
-    cluster_names:
-    - xds_cluster
+    grpc_services:
+    - envoy_grpc:
+        cluster_name: xds_cluster
   cds_config:
     api_config_source:
       api_type: GRPC
-      cluster_names:
-      - xds_cluster
+      grpc_services:
+      - envoy_grpc:
+          cluster_name: xds_cluster
+      set_node_on_first_message_only: true
   lds_config:
     api_config_source:
       api_type: GRPC
-      cluster_names:
-      - xds_cluster
+      grpc_services:
+      - envoy_grpc:
+          cluster_name: xds_cluster
+      set_node_on_first_message_only: true
 node:
   cluster: service_greeter
   id: test-id
-
 static_resources:
   clusters:
-  - name: xds_cluster
-    connect_timeout: 1s
+  - connect_timeout: 1s
     hosts:
     - socket_address:
         address: 127.0.0.1
         port_value: 18000
     http2_protocol_options: {}
+    name: xds_cluster
+    type: STATIC
 ```
 
 You can verify the cluster was dynamically added in by viewing the envoy admin console at ```http://localhost:9000```.  A sample output of that console:
@@ -260,7 +273,7 @@ the control plane dynamically configured a cluster, listenr and upstream for you
 #### curl
 
 ```
-$ curl -v -X HEAD  localhost:10000/robots.txt
+$ curl -v  localhost:10000/
 Warning: Setting custom HTTP method to HEAD with -X/--request may not work the 
 Warning: way you want. Consider using -I/--head instead.
 *   Trying ::1...
