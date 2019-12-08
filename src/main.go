@@ -216,7 +216,7 @@ func main() {
 	}
 	config = cache.NewSnapshotCache(mode == Ads, Hasher{}, logger{})
 
-	srv := xds.NewServer(config, cb)
+	srv := xds.NewServer(ctx, config, cb)
 
 	//als := &accesslogs.AccessLogService{}
 	als := &myals.AccessLogService{}

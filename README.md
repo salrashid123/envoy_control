@@ -88,7 +88,7 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 		ctx := context.Background()
 		config = cache.NewSnapshotCache(mode == Ads, Hasher{}, logger{})
 
-		srv := xds.NewServer(config, cb)
+		srv := xds.NewServer(ctx, config, cb)
 		atomic.AddInt32(&version, 1)
 		nodeId := config.GetStatusKeys()[1]
 
