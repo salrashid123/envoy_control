@@ -214,7 +214,7 @@ func main() {
 		fetches:  0,
 		requests: 0,
 	}
-	config = cache.NewSnapshotCache(mode == Ads, Hasher{}, logger{})
+	config = cache.NewSnapshotCache(mode == Ads, Hasher{}, nil)
 
 	srv := xds.NewServer(ctx, config, cb)
 
@@ -275,7 +275,7 @@ func main() {
 		// =================================================================================
 		var listenerName = "listener_0"
 		var targetHost = "www.bbc.com"
-		var targetRegex = "/*"
+		var targetRegex = ".*"
 		var virtualHostName = "local_service"
 		var routeConfigName = "local_route"
 

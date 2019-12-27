@@ -126,7 +126,7 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 ```golang
 		var listenerName = "listener_0"
 		var targetHost = "www.bbc.com"
-		var targetRegex = "/*"
+		var targetRegex = ".*"
 		var virtualHostName = "local_service"
 		var routeConfigName = "local_route"
 
@@ -211,7 +211,7 @@ The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) c
 
 Now start the envoy proxy with the baseline configurtion.  Note, the config only tells envoy where to find the control plane (in this case, ```127.0.0.1:18000```)
 ```
-$ envoy -c baseline.yaml --v2-config-only -l info
+$ envoy -c baseline.yaml  -l debug
 ```
 
 - [baseline.yaml](baseline.yaml)
