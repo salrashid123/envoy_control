@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -51,6 +50,8 @@ var (
 	version int32
 
 	config cache.SnapshotCache
+
+	strSlice = []string{"www.bbc.com", "www.yahoo.com", "blog.salrashid.me"}
 )
 
 const (
@@ -237,14 +238,16 @@ func main() {
 	als.Dump(func(s string) { log.Debug(s) })
 	cb.Report()
 
-	for {
-		atomic.AddInt32(&version, 1)
+	//for {
+
+	for _, v := range strSlice {
+
 		nodeId := config.GetStatusKeys()[0]
 
 		var clusterName = "service_bbc"
-		var remoteHost = "www.bbc.com"
-		var sni = "www.bbc.com"
-		log.Infof(">>>>>>>>>>>>>>>>>>> creating cluster " + clusterName)
+		var remoteHost = v
+		var sni = v
+		log.Infof(">>>>>>>>>>>>>>>>>>> creating cluster %v  with  remoteHost", clusterName, v)
 
 		//c := []cache.Resource{resource.MakeCluster(resource.Ads, clusterName)}
 
@@ -274,7 +277,7 @@ func main() {
 
 		// =================================================================================
 		var listenerName = "listener_0"
-		var targetHost = "www.bbc.com"
+		var targetHost = v
 		var targetRegex = ".*"
 		var virtualHostName = "local_service"
 		var routeConfigName = "local_route"
@@ -349,13 +352,16 @@ func main() {
 
 		// =================================================================================
 
+		atomic.AddInt32(&version, 1)
 		log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(version))
 		snap := cache.NewSnapshot(fmt.Sprint(version), nil, c, nil, l, nil)
 
 		config.SetSnapshot(nodeId, snap)
 
-		reader := bufio.NewReader(os.Stdin)
-		_, _ = reader.ReadString('\n')
+		//reader := bufio.NewReader(os.Stdin)
+		//_, _ = reader.ReadString('\n')
+
+		time.Sleep(60 * time.Second)
 
 	}
 

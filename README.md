@@ -75,12 +75,60 @@ INFO[0000] access log server listening                   port=18090
 INFO[0000] management server listening                   port=18000
 ```
 
-The code is almost entirely contained in [src/main.go](src/main.go) which launhes the control plane and proceeds to setup a static config to proxy to ```www.bbc.com/robots.txt``` (and only that endpoint).
+The code is almost entirely contained in [src/main.go](src/main.go) which launhes the control plane and proceeds to setup a static config to proxy to a set of `/robots.txt` files from three sites:
 
+```golang
+[]string{"www.bbc.com", "www.yahoo.com", "blog.salrashid.me"}
+```
+
+Every 60 seconds, the host will rotate over which means for the first 60 seconds, you'll see the robots.txt file from bbc, then yahoo then google.
+
+Note, we increment the snapshot verision number and the host as well:
+
+```
+$ go run src/main.go 
+INFO[0000] Starting control plane                       
+INFO[0000] gateway listening HTTP/1.1                    port=18001
+INFO[0000] access log server listening                   port=18090
+INFO[0000] management server listening                   port=18000
+INFO[0003] OnStreamOpen 1 open for type.googleapis.com/envoy.api.v2.Cluster 
+INFO[0003] OnStreamRequest                              
+INFO[0003] cb.Report()  callbacks                        fetches=0 requests=1
+INFO[0003] >>>>>>>>>>>>>>>>>>> creating cluster service_bbc  with  remoteHost%!(EXTRA string=www.bbc.com) 
+INFO[0003] >>>>>>>>>>>>>>>>>>> creating listener listener_0 
+INFO[0003] >>>>>>>>>>>>>>>>>>> creating snapshot Version 1 
+INFO[0003] OnStreamResponse...                          
+INFO[0003] cb.Report()  callbacks                        fetches=0 requests=1
+INFO[0003] OnStreamRequest                              
+INFO[0004] OnStreamOpen 2 open for                      
+INFO[0007] OnStreamOpen 3 open for type.googleapis.com/envoy.api.v2.Listener 
+INFO[0007] OnStreamRequest                              
+INFO[0007] OnStreamResponse...                          
+INFO[0007] cb.Report()  callbacks                        fetches=0 requests=3
+INFO[0007] OnStreamRequest                              
+INFO[0063] >>>>>>>>>>>>>>>>>>> creating cluster service_bbc  with  remoteHost%!(EXTRA string=www.yahoo.com) 
+INFO[0063] >>>>>>>>>>>>>>>>>>> creating listener listener_0 
+INFO[0063] >>>>>>>>>>>>>>>>>>> creating snapshot Version 2 
+INFO[0063] OnStreamResponse...                          
+INFO[0063] cb.Report()  callbacks                        fetches=0 requests=4
+INFO[0063] OnStreamResponse...                          
+INFO[0063] cb.Report()  callbacks                        fetches=0 requests=4
+INFO[0063] OnStreamRequest                              
+INFO[0063] OnStreamRequest                              
+INFO[0123] >>>>>>>>>>>>>>>>>>> creating cluster service_bbc  with  remoteHost%!(EXTRA string=blog.salrashid.me) 
+INFO[0123] >>>>>>>>>>>>>>>>>>> creating listener listener_0 
+INFO[0123] >>>>>>>>>>>>>>>>>>> creating snapshot Version 3 
+INFO[0123] OnStreamResponse...                          
+INFO[0123] OnStreamResponse...                          
+INFO[0123] cb.Report()  callbacks                        fetches=0 requests=6
+INFO[0123] cb.Report()  callbacks                        fetches=0 requests=6
+INFO[0123] OnStreamRequest                              
+INFO[0123] OnStreamRequest   
+```
 
 You can review the code to see how the structure is nested and initialized.
 
-The code strives to mimic the configuration defined as if [bbc.yaml](bbc.yaml) config file was passed to envoy.
+If you just set the value to bbc and not iterate, the code will behave as if [bbc.yaml](bbc.yaml) config file was passed to envoy:
 
 #### Create Cluster
 
