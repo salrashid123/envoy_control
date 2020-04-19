@@ -22,6 +22,9 @@ this article but I'll describe it in the appendix.
 
 > Note: much of the code and config i got here is taken from the Envoy [integration test suite](https://github.com/envoyproxy/go-control-plane/tree/master/pkg/test/main)
 
+>>  NOTE: this repo uses the control API sas of: 
+   ```docker pull envoyproxy/envoy:v1.12.2```
+
 ## Additional Reading
 
 - [Matt Klien's blog](https://blog.envoyproxy.io/the-universal-data-plane-api-d15cec7a)
@@ -35,28 +38,6 @@ this article but I'll describe it in the appendix.
 ---
 
 ## Setup
-
-```bash
-cd envoy_control
-export GOPATH=`pwd`
-
-
-go get github.com/envoyproxy/go-control-plane/envoy/api/v2 \
-  github.com/envoyproxy/go-control-plane/envoy/api/v2/auth \
-  github.com/envoyproxy/go-control-plane/envoy/api/v2/core \
-  github.com/envoyproxy/go-control-plane/envoy/api/v2/listener \
-  github.com/envoyproxy/go-control-plane/envoy/api/v2/route \
-  github.com/envoyproxy/go-control-plane/envoy/config/filter/network/http_connection_manager/v2 \
-  github.com/envoyproxy/go-control-plane/envoy/data/accesslog/v2 \
-  github.com/envoyproxy/go-control-plane/envoy/service/accesslog/v2 \
-  github.com/envoyproxy/go-control-plane/envoy/service/discovery/v2 \
-  github.com/envoyproxy/go-control-plane/pkg/cache \
-  github.com/envoyproxy/go-control-plane/pkg/server \
-  github.com/envoyproxy/go-control-plane/pkg/wellknown \
-  github.com/golang/protobuf/ptypes \
-  github.com/sirupsen/logrus \
-  google.golang.org/grpc
-```
 
 
 ### Start Control Plane
@@ -83,8 +64,7 @@ The code is almost entirely contained in [src/main.go](src/main.go) which launhe
 
 Every 60 seconds, the host will rotate over which means for the first 60 seconds, you'll see the robots.txt file from bbc, then yahoo then google.
 
-Note, we increment the snapshot verision number and the host as well:
-
+Note, we increment the snapshot version number and the host as well:
 ```
 $ go run src/main.go 
 INFO[0000] Starting control plane                       
@@ -258,8 +238,24 @@ If you just set the value to bbc and not iterate, the code will behave as if [bb
 ### Start Envoy Proxy
 
 Now start the envoy proxy with the baseline configurtion.  Note, the config only tells envoy where to find the control plane (in this case, ```127.0.0.1:18000```)
+
+
+## Acquire envoy binary `1.12.2`:
+
+```bash
+$ docker pull envoyproxy/envoy:v1.12.2
+$ docker run -v /tmp/envoybin/:/tmp/envoybin -ti envoyproxy/envoy:v1.12.2 /bin/bash
+(in container)
+   $ cp /usr/local/bin/envoy /tmp/envoybin/
+$ exit
 ```
-$ envoy -c baseline.yaml  -l debug
+
+At this point `/tmp/envoybin/envoy` is a binary of version `1.12.2`
+
+Run envoy:
+
+```
+$ /tmp/envoybin/envoy -c baseline.yaml  -l debug
 ```
 
 - [baseline.yaml](baseline.yaml)
