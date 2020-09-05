@@ -10,11 +10,10 @@ getting a specific predetetermined setting set push to each proxy at runtime.
 That is, once Envoy is started, it reads in an empty configuration which only tells it where the control plane gRPC server exists.
 
 After connecting to the control plane, it receives configuration information to setup an upstream cluster and listener set.  The 
-specific listener and cluster is trivial:  it merely proxies a request for (and only for) ```https://www.bbc.com/robots.txt```.
+specific listener and cluster is trivial:  it merely proxies a request for `https://www.bbc.com/robots.txt`, then after a minute, it will update the envoy config to proxy for `www.yahoo.com/robots`  then finally after another minute, `blog.salrashid.me`.
 
 To run this sample, you need to install golang and Envoy binary itself.
 
-Again, this repo/articleis just how I worked through setting this up...it not best practices but simply a 'hello world' config.
 
 As a bonus, the control plane also launches an [Access Log](https://www.envoyproxy.io/docs/envoy/latest/configuration/access_log) gRPC
 service.  This service will receives access log stats dirctly from the proxy.  Setting up the access log is not the primary focus of 
@@ -56,7 +55,7 @@ INFO[0000] access log server listening                   port=18090
 INFO[0000] management server listening                   port=18000
 ```
 
-The code is almost entirely contained in [src/main.go](src/main.go) which launhes the control plane and proceeds to setup a static config to proxy to a set of `/robots.txt` files from three sites:
+The code is almost entirely contained in [src/main.go](src/main.go) which launches the control plane and proceeds to setup a static config to proxy to a set of `/robots.txt` files from three sites:
 
 ```golang
 []string{"www.bbc.com", "www.yahoo.com", "blog.salrashid.me"}
@@ -122,10 +121,15 @@ If you just set the value to bbc and not iterate, the code will behave as if [bb
 
 		var clusterName = "service_bbc"
 		var remoteHost = "www.bbc.com"
-		var sni = "www.bbc.com"
-		log.Infof(">>>>>>>>>>>>>>>>>>> creating cluster " + clusterName)
 
-		h := &core.Address{Address: &core.Address_SocketAddress{
+		nodeId := config.GetStatusKeys()[0]
+
+		var clusterName = "service_bbc"
+		var remoteHost = v
+
+		log.Infof(">>>>>>>>>>>>>>>>>>> creating cluster %v  with  remoteHost", clusterName, v)
+
+		hst := &core.Address{Address: &core.Address_SocketAddress{
 			SocketAddress: &core.SocketAddress{
 				Address:  remoteHost,
 				Protocol: core.SocketAddress_TCP,
@@ -134,6 +138,11 @@ If you just set the value to bbc and not iterate, the code will behave as if [bb
 				},
 			},
 		}}
+		uctx := &envoy_api_v2_auth.UpstreamTlsContext{}
+		tctx, err := ptypes.MarshalAny(uctx)
+		if err != nil {
+			panic(err)
+		}
 
 		c := []cache.Resource{
 			&v2.Cluster{
@@ -142,9 +151,24 @@ If you just set the value to bbc and not iterate, the code will behave as if [bb
 				ClusterDiscoveryType: &v2.Cluster_Type{Type: v2.Cluster_LOGICAL_DNS},
 				DnsLookupFamily:      v2.Cluster_V4_ONLY,
 				LbPolicy:             v2.Cluster_ROUND_ROBIN,
-				Hosts:                []*core.Address{h},
-				TlsContext: &auth.UpstreamTlsContext{
-					Sni: sni,
+				LoadAssignment: &v2.ClusterLoadAssignment{
+					ClusterName: clusterName,
+					Endpoints: []*envoy_api_v2_endpoint.LocalityLbEndpoints{{
+						LbEndpoints: []*envoy_api_v2_endpoint.LbEndpoint{
+							{
+								HostIdentifier: &envoy_api_v2_endpoint.LbEndpoint_Endpoint{
+									Endpoint: &envoy_api_v2_endpoint.Endpoint{
+										Address: hst,
+									}},
+							},
+						},
+					}},
+				},
+				TransportSocket: &core.TransportSocket{
+					Name: "envoy.transport_sockets.tls",
+					ConfigType: &core.TransportSocket_TypedConfig{
+						TypedConfig: tctx,
+					},
 				},
 			},
 		}
@@ -240,17 +264,13 @@ If you just set the value to bbc and not iterate, the code will behave as if [bb
 Now start the envoy proxy with the baseline configurtion.  Note, the config only tells envoy where to find the control plane (in this case, ```127.0.0.1:18000```)
 
 
-## Acquire envoy binary `1.12.2`:
+## Acquire envoy binary `1.14.3`:
 
 ```bash
-$ docker pull envoyproxy/envoy:v1.12.2
-$ docker run -v /tmp/envoybin/:/tmp/envoybin -ti envoyproxy/envoy:v1.12.2 /bin/bash
-(in container)
-   $ cp /usr/local/bin/envoy /tmp/envoybin/
-$ exit
+docker cp `docker create envoyproxy/envoy:v1.14.3`:/usr/local/bin/envoy .
 ```
 
-At this point `/tmp/envoybin/envoy` is a binary of version `1.12.2`
+At this point `/tmp/envoybin/envoy` is a binary of version `1.14.3`
 
 Run envoy:
 
@@ -306,7 +326,7 @@ You can verify the cluster was dynamically added in by viewing the envoy admin c
 
 ![images/admin_clusters.png](images/admin_clusters.png)
 
-### Access enpoint thorough proxy
+### Access endpoint thorough proxy
 
 Now you can use ```curl``` to access the robots.txt file on the upstream host thrrough the proxy.  You're alble to do this now because
 the control plane dynamically configured a cluster, listenr and upstream for you on bootstrap.
@@ -446,7 +466,7 @@ static_resources:
             - name: local_service
               domains: ["*"]
               routes:
-              - match: { regex: ".*" }
+              - match: { prefix: "/" }
                 route: { host_rewrite: www.bbc.com, cluster: service_bbc, prefix_rewrite: "/robots.txt" }
           http_filters:
           - name: envoy.router

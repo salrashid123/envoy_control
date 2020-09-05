@@ -26,7 +26,7 @@ static_resources:
             - name: local_service
               domains: ["*"]
               routes:
-              - match: { regex: ".*" }
+              - match: { prefix: "/" }
                 route: { host_rewrite: www.bbc.com, cluster: service_bbc, prefix_rewrite: "/robots.txt" }
           http_filters:
           - name: envoy.router  
@@ -37,9 +37,18 @@ static_resources:
     type: LOGICAL_DNS
     dns_lookup_family: V4_ONLY
     lb_policy: ROUND_ROBIN
-    hosts:
-    - socket_address:
-        address: www.bbc.com
-        port_value: 443    
-    tls_context: { sni: www.bbc.com }
+    load_assignment:
+      cluster_name: service_bbc
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: www.bbc.com
+                port_value: 443
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext
+
     

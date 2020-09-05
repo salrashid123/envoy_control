@@ -13,8 +13,9 @@ import (
 	"time"
 
 	v2 "github.com/envoyproxy/go-control-plane/envoy/api/v2"
-	auth "github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
+	envoy_api_v2_auth "github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
 	core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
+	envoy_api_v2_endpoint "github.com/envoyproxy/go-control-plane/envoy/api/v2/endpoint"
 	listener "github.com/envoyproxy/go-control-plane/envoy/api/v2/listener"
 	v2route "github.com/envoyproxy/go-control-plane/envoy/api/v2/route"
 
@@ -246,12 +247,10 @@ func main() {
 
 		var clusterName = "service_bbc"
 		var remoteHost = v
-		var sni = v
+
 		log.Infof(">>>>>>>>>>>>>>>>>>> creating cluster %v  with  remoteHost", clusterName, v)
 
-		//c := []cache.Resource{resource.MakeCluster(resource.Ads, clusterName)}
-
-		h := &core.Address{Address: &core.Address_SocketAddress{
+		hst := &core.Address{Address: &core.Address_SocketAddress{
 			SocketAddress: &core.SocketAddress{
 				Address:  remoteHost,
 				Protocol: core.SocketAddress_TCP,
@@ -260,6 +259,11 @@ func main() {
 				},
 			},
 		}}
+		uctx := &envoy_api_v2_auth.UpstreamTlsContext{}
+		tctx, err := ptypes.MarshalAny(uctx)
+		if err != nil {
+			panic(err)
+		}
 
 		c := []cache.Resource{
 			&v2.Cluster{
@@ -268,9 +272,24 @@ func main() {
 				ClusterDiscoveryType: &v2.Cluster_Type{Type: v2.Cluster_LOGICAL_DNS},
 				DnsLookupFamily:      v2.Cluster_V4_ONLY,
 				LbPolicy:             v2.Cluster_ROUND_ROBIN,
-				Hosts:                []*core.Address{h},
-				TlsContext: &auth.UpstreamTlsContext{
-					Sni: sni,
+				LoadAssignment: &v2.ClusterLoadAssignment{
+					ClusterName: clusterName,
+					Endpoints: []*envoy_api_v2_endpoint.LocalityLbEndpoints{{
+						LbEndpoints: []*envoy_api_v2_endpoint.LbEndpoint{
+							{
+								HostIdentifier: &envoy_api_v2_endpoint.LbEndpoint_Endpoint{
+									Endpoint: &envoy_api_v2_endpoint.Endpoint{
+										Address: hst,
+									}},
+							},
+						},
+					}},
+				},
+				TransportSocket: &core.TransportSocket{
+					Name: "envoy.transport_sockets.tls",
+					ConfigType: &core.TransportSocket_TypedConfig{
+						TypedConfig: tctx,
+					},
 				},
 			},
 		}
@@ -278,7 +297,7 @@ func main() {
 		// =================================================================================
 		var listenerName = "listener_0"
 		var targetHost = v
-		var targetRegex = ".*"
+		var targetPrefix = "/"
 		var virtualHostName = "local_service"
 		var routeConfigName = "local_route"
 
@@ -290,8 +309,8 @@ func main() {
 
 			Routes: []*v2route.Route{{
 				Match: &v2route.RouteMatch{
-					PathSpecifier: &v2route.RouteMatch_Regex{
-						Regex: targetRegex,
+					PathSpecifier: &v2route.RouteMatch_Prefix{
+						Prefix: targetPrefix,
 					},
 				},
 				Action: &v2route.Route_Route{
