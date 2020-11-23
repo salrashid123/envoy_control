@@ -30,6 +30,10 @@ static_resources:
                 route: { host_rewrite: www.bbc.com, cluster: service_bbc, prefix_rewrite: "/robots.txt" }
           http_filters:
           - name: envoy.router  
+      tls_context:              
+        common_tls_context:
+          tls_certificate_sds_secret_configs:
+          - name: server_cert
 
   clusters:
   - name: service_bbc
@@ -51,4 +55,21 @@ static_resources:
       typed_config:
         "@type": type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext
 
-    
+  # static secrets
+  secrets:
+  - name: server_cert
+    tls_certificate:
+      certificate_chain:
+        filename: certs/server.crt
+      private_key:
+        filename: certs/server.key
+  - name: client_cert
+    tls_certificate:
+      certificate_chain:
+        filename: certs/client.crt
+      private_key:
+        filename: client.key
+  - name: validation_context
+    validation_context:
+      trusted_ca:
+        filename: certs/tls-ca-chain.pem

@@ -1,13 +1,10 @@
 module main
 
-go 1.14
+go 1.15
 
 require (
-	accesslogs v0.0.0
-	github.com/envoyproxy/go-control-plane v0.9.4
-	github.com/golang/protobuf v1.4.2
-	github.com/sirupsen/logrus v1.6.0
-	google.golang.org/grpc v1.31.1
+	github.com/envoyproxy/go-control-plane v0.9.7 // indirect
+	github.com/golang/protobuf v1.4.3 // indirect
+	github.com/sirupsen/logrus v1.7.0 // indirect
+	google.golang.org/grpc v1.33.2 // indirect
 )
-
-replace accesslogs => ./src/accesslogs
