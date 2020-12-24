@@ -108,8 +108,13 @@ If you just set the value to bbc and not iterate, the code will behave as if [bb
 
 To run envoy, just download a local envoy
 
+>> *NOTE* we are using `envoy 1.17`
+
 ``` 
-   docker cp `docker create envoyproxy/envoy:v1.16-latest`:/usr/local/bin/envoy .
+   docker cp `docker create envoyproxy/envoy-dev:latest`:/usr/local/bin/envoy .
+
+   ./envoy --version
+   envoy  version: 483dd3007f15e47deed0a29d945ff776abb37815/1.17.0-dev/Clean/RELEASE/BoringSSL
 ```
 
 Then invoke
@@ -248,14 +253,14 @@ In the first TLS option, we will create a static TLS certs to beam down:
 			log.Fatal(err)
 		}
 
-		sdsTls := &envoy_api_v2_auth.DownstreamTlsContext{
-			CommonTlsContext: &envoy_api_v2_auth.CommonTlsContext{
-				TlsCertificates: []*envoy_api_v2_auth.TlsCertificate{{
-					CertificateChain: &envoy_api_v2_core.DataSource{
-						Specifier: &envoy_api_v2_core.DataSource_InlineBytes{InlineBytes: []byte(pub)},
+		sdsTls := &envoy_api_v3_auth.DownstreamTlsContext{
+			CommonTlsContext: &envoy_api_v3_auth.CommonTlsContext{
+				TlsCertificates: []*envoy_api_v3_auth.TlsCertificate{{
+					CertificateChain: &core.DataSource{
+						Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(pub)},
 					},
-					PrivateKey: &envoy_api_v2_core.DataSource{
-						Specifier: &envoy_api_v2_core.DataSource_InlineBytes{InlineBytes: []byte(priv)},
+					PrivateKey: &core.DataSource{
+						Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(priv)},
 					},
 				}},
 			},
@@ -322,7 +327,7 @@ Edit `baseline.yaml`, and uncomment
 then in `main.go`, 
 
 ```golang
-		sdsTls := &envoy_api_v2_auth.DownstreamTlsContext{
+		sdsTls := &envoy_api_v3_auth.DownstreamTlsContext{
 			CommonTlsContext: &envoy_api_v2_auth.CommonTlsContext{
 				TlsCertificateSdsSecretConfigs: []*envoy_api_v2_auth.SdsSecretConfig{{
 					Name: "server_cert",
@@ -339,9 +344,9 @@ What the above setting will do is instruct envoy to look for a local static secr
 The following Secrets config will provide a reference *and* beam down the Secret itself
 
 ```golang
-		sdsTls := &auth.DownstreamTlsContext{
-			CommonTlsContext: &auth.CommonTlsContext{
-				TlsCertificateSdsSecretConfigs: []*auth.SdsSecretConfig{{
+		sdsTls := &envoy_api_v3_auth.DownstreamTlsContext{
+			CommonTlsContext: &envoy_api_v3_auth.CommonTlsContext{
+				TlsCertificateSdsSecretConfigs: []*envoy_api_v3_auth.SdsSecretConfig{{
 					Name: "server_cert",
 					SdsConfig: &core.ConfigSource{
 						ConfigSourceSpecifier: &core.ConfigSource_Ads{

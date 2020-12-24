@@ -12,10 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	envoy_api_v2_auth "github.com/envoyproxy/go-control-plane/envoy/api/v2/auth"
-	envoy_api_v2_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-	auth "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
+	envoy_api_v3_auth "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 
 	"github.com/golang/protobuf/ptypes"
 
@@ -196,7 +194,7 @@ func main() {
 				},
 			},
 		}}
-		uctx := &envoy_api_v2_auth.UpstreamTlsContext{}
+		uctx := &envoy_api_v3_auth.UpstreamTlsContext{}
 		tctx, err := ptypes.MarshalAny(uctx)
 		if err != nil {
 			log.Fatal(err)
@@ -299,14 +297,14 @@ func main() {
 
 		// 1. send TLS certs filename back directly
 
-		sdsTls := &envoy_api_v2_auth.DownstreamTlsContext{
-			CommonTlsContext: &envoy_api_v2_auth.CommonTlsContext{
-				TlsCertificates: []*envoy_api_v2_auth.TlsCertificate{{
-					CertificateChain: &envoy_api_v2_core.DataSource{
-						Specifier: &envoy_api_v2_core.DataSource_InlineBytes{InlineBytes: []byte(pub)},
+		sdsTls := &envoy_api_v3_auth.DownstreamTlsContext{
+			CommonTlsContext: &envoy_api_v3_auth.CommonTlsContext{
+				TlsCertificates: []*envoy_api_v3_auth.TlsCertificate{{
+					CertificateChain: &core.DataSource{
+						Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(pub)},
 					},
-					PrivateKey: &envoy_api_v2_core.DataSource{
-						Specifier: &envoy_api_v2_core.DataSource_InlineBytes{InlineBytes: []byte(priv)},
+					PrivateKey: &core.DataSource{
+						Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(priv)},
 					},
 				}},
 			},
@@ -314,9 +312,9 @@ func main() {
 
 		// or
 		// 2. send TLS SDS Reference value
-		// sdsTls := &envoy_api_v2_auth.DownstreamTlsContext{
-		// 	CommonTlsContext: &envoy_api_v2_auth.CommonTlsContext{
-		// 		TlsCertificateSdsSecretConfigs: []*envoy_api_v2_auth.SdsSecretConfig{{
+		// sdsTls := &envoy_api_v3_auth.DownstreamTlsContext{
+		// 	CommonTlsContext: &envoy_api_v3_auth.CommonTlsContext{
+		// 		TlsCertificateSdsSecretConfigs: []*envoy_api_v3_auth.SdsSecretConfig{{
 		// 			Name: "server_cert",
 		// 		}},
 		// 	},
@@ -324,9 +322,9 @@ func main() {
 
 		// 3. SDS via ADS
 
-		// sdsTls := &auth.DownstreamTlsContext{
-		// 	CommonTlsContext: &auth.CommonTlsContext{
-		// 		TlsCertificateSdsSecretConfigs: []*auth.SdsSecretConfig{{
+		// sdsTls := &envoy_api_v3_auth.DownstreamTlsContext{
+		// 	CommonTlsContext: &envoy_api_v3_auth.CommonTlsContext{
+		// 		TlsCertificateSdsSecretConfigs: []*envoy_api_v3_auth.SdsSecretConfig{{
 		// 			Name: "server_cert",
 		// 			SdsConfig: &core.ConfigSource{
 		// 				ConfigSourceSpecifier: &core.ConfigSource_Ads{
@@ -377,10 +375,10 @@ func main() {
 
 		log.Infof(">>>>>>>>>>>>>>>>>>> creating Secret " + secretName)
 		var s = []types.Resource{
-			&auth.Secret{
+			&envoy_api_v3_auth.Secret{
 				Name: secretName,
-				Type: &auth.Secret_TlsCertificate{
-					TlsCertificate: &auth.TlsCertificate{
+				Type: &envoy_api_v3_auth.Secret_TlsCertificate{
+					TlsCertificate: &envoy_api_v3_auth.TlsCertificate{
 						CertificateChain: &core.DataSource{
 							Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(pub)},
 						},
