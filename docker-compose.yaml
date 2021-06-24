@@ -1,0 +1,22 @@
+version: "3.7"
+services:
+
+  envoy:
+    build:
+      context: .
+      dockerfile: Dockerfile-envoy
+    expose:
+      - "9000"
+      - "10000"
+    ports:
+      - "9000:9000"
+      - "10000:10000"
+
+  xds:
+    build:
+      context: .
+      dockerfile: Dockerfile-xds
+    expose:
+      - "18000"
+    # ports:
+    #   - "18000:18000"

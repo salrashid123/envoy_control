@@ -40,7 +40,7 @@ var (
 	onlyLogging bool
 	withALS     bool
 
-	localhost = "127.0.0.1"
+	localhost = "0.0.0.0"
 
 	port        uint
 	gatewayPort uint
@@ -52,7 +52,7 @@ var (
 
 	cache cachev3.SnapshotCache
 
-	strSlice = []string{"www.bbc.com", "www.yahoo.com", "blog.salrashid.me"}
+	strSlice = []string{"www.bbc.com", "www.yahoo.com", "blog.salrashid.me", "www.baidu.com"}
 )
 
 const (
@@ -175,6 +175,7 @@ func main() {
 	go RunManagementServer(ctx, srv, port)
 
 	<-signal
+	time.Sleep(10 * time.Second)
 
 	for _, v := range strSlice {
 

@@ -1,0 +1,9 @@
+FROM envoyproxy/envoy-dev
+
+RUN mkdir /app
+
+ADD . /app
+
+WORKDIR /app
+
+ENTRYPOINT ["envoy", "-c", "baseline.yaml", "-l", "debug", "--service-cluster", "service"]
