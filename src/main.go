@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 
@@ -40,7 +39,7 @@ var (
 	onlyLogging bool
 	withALS     bool
 
-	localhost = "127.0.0.1"
+	localhost = "0.0.0.0"
 
 	port        uint
 	gatewayPort uint
@@ -52,7 +51,7 @@ var (
 
 	cache cachev3.SnapshotCache
 
-	strSlice = []string{"www.bbc.com", "www.yahoo.com", "blog.salrashid.me"}
+	strSlice = []string{"www.bbc.com", "www.yahoo.com", "blog.salrashid.me", "www.baidu.com"}
 )
 
 const (
@@ -69,50 +68,65 @@ func init() {
 	flag.StringVar(&mode, "ads", Ads, "Management server type (ads only now)")
 }
 
-func (cb *Callbacks) Report() {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	log.WithFields(log.Fields{"fetches": cb.Fetches, "requests": cb.Requests}).Info("cb.Report()  callbacks")
-}
-func (cb *Callbacks) OnStreamOpen(_ context.Context, id int64, typ string) error {
-	log.Infof("OnStreamOpen %d open for %s", id, typ)
+func (cb *Callbacks) OnStreamOpen(c context.Context, sid int64, typeUrl string) error {
+	log.WithFields(log.Fields{
+		"streamID": sid,
+		"typeUrl":  typeUrl,
+	}).Debug("New stream open")
 	return nil
 }
-func (cb *Callbacks) OnStreamClosed(id int64) {
-	log.Infof("OnStreamClosed %d closed", id)
+func (cb *Callbacks) OnStreamClosed(sid int64) {
+	log.WithFields(log.Fields{
+		"streamID": sid,
+	}).Debug("Stream closed")
 }
-func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest) error {
-	log.Infof("OnStreamRequest %v", r.TypeUrl)
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	cb.Requests++
-	if cb.Signal != nil {
-		close(cb.Signal)
-		cb.Signal = nil
+
+func (cb *Callbacks) OnStreamRequest(sid int64, req *discoverygrpc.DiscoveryRequest) error {
+	nreq := &discoverygrpc.DiscoveryRequest{
+		VersionInfo:   req.VersionInfo,
+		ResourceNames: req.ResourceNames,
+		TypeUrl:       req.TypeUrl,
+		ResponseNonce: req.ResponseNonce,
+		ErrorDetail:   req.ErrorDetail,
 	}
+	log.WithFields(log.Fields{
+		"streamID": sid,
+		"request":  nreq,
+	}).Debug("New discovery request")
 	return nil
 }
-func (cb *Callbacks) OnStreamResponse(int64, *discoverygrpc.DiscoveryRequest, *discoverygrpc.DiscoveryResponse) {
-	log.Infof("OnStreamResponse...")
-	cb.Report()
-}
-func (cb *Callbacks) OnFetchRequest(ctx context.Context, req *discoverygrpc.DiscoveryRequest) error {
-	log.Infof("OnFetchRequest...")
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	cb.Fetches++
-	if cb.Signal != nil {
-		close(cb.Signal)
-		cb.Signal = nil
+
+func (cb *Callbacks) OnStreamResponse(sid int64, req *discoverygrpc.DiscoveryRequest, resp *discoverygrpc.DiscoveryResponse) {
+	nreq := &discoverygrpc.DiscoveryRequest{
+		VersionInfo:   req.VersionInfo,
+		ResourceNames: req.ResourceNames,
+		TypeUrl:       req.TypeUrl,
+		ResponseNonce: req.ResponseNonce,
+		ErrorDetail:   req.ErrorDetail,
 	}
+	log.WithFields(log.Fields{
+		"streamID": sid,
+		"request":  nreq,
+		"response": resp,
+	}).Debug("New discovery response")
+}
+
+func (cb *Callbacks) OnFetchRequest(c context.Context, req *discoverygrpc.DiscoveryRequest) error {
+	log.WithFields(log.Fields{
+		"request": req,
+	}).Debug("New fetch request")
 	return nil
 }
-func (cb *Callbacks) OnFetchResponse(*discoverygrpc.DiscoveryRequest, *discoverygrpc.DiscoveryResponse) {
-	log.Infof("OnFetchResponse...")
+
+func (cb *Callbacks) OnFetchResponse(req *discoverygrpc.DiscoveryRequest, resp *discoverygrpc.DiscoveryResponse) {
+	log.WithFields(log.Fields{
+		"request":  req,
+		"response": resp,
+	}).Debug("New fetch response")
 }
 
 type Callbacks struct {
-	Signal   chan struct{}
+	// Signal   chan struct{}
 	Debug    bool
 	Fetches  int
 	Requests int
@@ -161,9 +175,9 @@ func main() {
 
 	log.Printf("Starting control plane")
 
-	signal := make(chan struct{})
+	// signal := make(chan struct{})
 	cb := &Callbacks{
-		Signal:   signal,
+		// Signal:   signal,
 		Fetches:  0,
 		Requests: 0,
 	}
@@ -174,7 +188,8 @@ func main() {
 	// start the xDS server
 	go RunManagementServer(ctx, srv, port)
 
-	<-signal
+	// <-signal
+	time.Sleep(10 * time.Second)
 
 	for _, v := range strSlice {
 
@@ -280,14 +295,14 @@ func main() {
 			log.Fatal(err)
 		}
 
-		priv, err := ioutil.ReadFile("certs/server.key")
-		if err != nil {
-			log.Fatal(err)
-		}
-		pub, err := ioutil.ReadFile("certs/server.crt")
-		if err != nil {
-			log.Fatal(err)
-		}
+		// priv, err := ioutil.ReadFile("certs/server.key")
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
+		// pub, err := ioutil.ReadFile("certs/server.crt")
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
 
 		// use the following imports
 		// envoy_api_v2_core "github.com/envoyproxy/go-control-plane/envoy/api/v2/core"
@@ -297,18 +312,18 @@ func main() {
 
 		// 1. send TLS certs filename back directly
 
-		sdsTls := &envoy_api_v3_auth.DownstreamTlsContext{
-			CommonTlsContext: &envoy_api_v3_auth.CommonTlsContext{
-				TlsCertificates: []*envoy_api_v3_auth.TlsCertificate{{
-					CertificateChain: &core.DataSource{
-						Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(pub)},
-					},
-					PrivateKey: &core.DataSource{
-						Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(priv)},
-					},
-				}},
-			},
-		}
+		// sdsTls := &envoy_api_v3_auth.DownstreamTlsContext{
+		// 	CommonTlsContext: &envoy_api_v3_auth.CommonTlsContext{
+		// 		TlsCertificates: []*envoy_api_v3_auth.TlsCertificate{{
+		// 			CertificateChain: &core.DataSource{
+		// 				Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(pub)},
+		// 			},
+		// 			PrivateKey: &core.DataSource{
+		// 				Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(priv)},
+		// 			},
+		// 		}},
+		// 	},
+		// }
 
 		// or
 		// 2. send TLS SDS Reference value
@@ -336,7 +351,7 @@ func main() {
 		// 	},
 		// }
 
-		scfg, err := ptypes.MarshalAny(sdsTls)
+		// scfg, err := ptypes.MarshalAny(sdsTls)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -362,39 +377,39 @@ func main() {
 							TypedConfig: pbst,
 						},
 					}},
-					TransportSocket: &core.TransportSocket{
-						Name: "envoy.transport_sockets.tls",
-						ConfigType: &core.TransportSocket_TypedConfig{
-							TypedConfig: scfg,
-						},
-					},
+					// TransportSocket: &core.TransportSocket{
+					// 	Name: "envoy.transport_sockets.tls",
+					// 	ConfigType: &core.TransportSocket_TypedConfig{
+					// 		TypedConfig: scfg,
+					// 	},
+					// },
 				}},
 			}}
 
-		var secretName = "server_cert"
+		// var secretName = "server_cert"
 
-		log.Infof(">>>>>>>>>>>>>>>>>>> creating Secret " + secretName)
-		var s = []types.Resource{
-			&envoy_api_v3_auth.Secret{
-				Name: secretName,
-				Type: &envoy_api_v3_auth.Secret_TlsCertificate{
-					TlsCertificate: &envoy_api_v3_auth.TlsCertificate{
-						CertificateChain: &core.DataSource{
-							Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(pub)},
-						},
-						PrivateKey: &core.DataSource{
-							Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(priv)},
-						},
-					},
-				},
-			},
-		}
+		// log.Infof(">>>>>>>>>>>>>>>>>>> creating Secret " + secretName)
+		// var s = []types.Resource{
+		// 	&envoy_api_v3_auth.Secret{
+		// 		Name: secretName,
+		// 		Type: &envoy_api_v3_auth.Secret_TlsCertificate{
+		// 			TlsCertificate: &envoy_api_v3_auth.TlsCertificate{
+		// 				CertificateChain: &core.DataSource{
+		// 					Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(pub)},
+		// 				},
+		// 				PrivateKey: &core.DataSource{
+		// 					Specifier: &core.DataSource_InlineBytes{InlineBytes: []byte(priv)},
+		// 				},
+		// 			},
+		// 		},
+		// 	},
+		// }
 
 		// =================================================================================
 		atomic.AddInt32(&version, 1)
 		log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(version))
 
-		snap := cachev3.NewSnapshot(fmt.Sprint(version), nil, c, nil, l, nil, s)
+		snap := cachev3.NewSnapshot(fmt.Sprint(version), nil, c, nil, l, nil, nil)
 		if err := snap.Consistent(); err != nil {
 			log.Errorf("snapshot inconsistency: %+v\n%+v", snap, err)
 			os.Exit(1)
