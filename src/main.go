@@ -19,15 +19,19 @@ import (
 
 	"github.com/envoyproxy/go-control-plane/pkg/cache/types"
 	cachev3 "github.com/envoyproxy/go-control-plane/pkg/cache/v3"
+	"github.com/envoyproxy/go-control-plane/pkg/resource/v3"
 
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	endpoint "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
-	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
-
 	listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
+	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
+	router "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/router/v3"
 	hcm "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	discoverygrpc "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 
@@ -92,12 +96,13 @@ func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest
 	}
 	return nil
 }
-func (cb *Callbacks) OnStreamResponse(int64, *discoverygrpc.DiscoveryRequest, *discoverygrpc.DiscoveryResponse) {
-	log.Infof("OnStreamResponse...")
+func (cb *Callbacks) OnStreamResponse(ctx context.Context, id int64, req *discoverygrpc.DiscoveryRequest, resp *discoverygrpc.DiscoveryResponse) {
+	log.Infof("OnStreamResponse... %d   Request [%v],  Response[%v]", id, req.TypeUrl, resp.TypeUrl)
 	cb.Report()
 }
+
 func (cb *Callbacks) OnFetchRequest(ctx context.Context, req *discoverygrpc.DiscoveryRequest) error {
-	log.Infof("OnFetchRequest...")
+	log.Infof("OnFetchRequest... Request [%v]", req.TypeUrl)
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	cb.Fetches++
@@ -107,8 +112,26 @@ func (cb *Callbacks) OnFetchRequest(ctx context.Context, req *discoverygrpc.Disc
 	}
 	return nil
 }
-func (cb *Callbacks) OnFetchResponse(*discoverygrpc.DiscoveryRequest, *discoverygrpc.DiscoveryResponse) {
-	log.Infof("OnFetchResponse...")
+func (cb *Callbacks) OnFetchResponse(req *discoverygrpc.DiscoveryRequest, resp *discoverygrpc.DiscoveryResponse) {
+	log.Infof("OnFetchResponse... Resquest[%v],  Response[%v]", req.TypeUrl, resp.TypeUrl)
+}
+
+func (cb *Callbacks) OnDeltaStreamClosed(id int64) {
+	log.Infof("OnDeltaStreamClosed... %v", id)
+}
+
+func (cb *Callbacks) OnDeltaStreamOpen(ctx context.Context, id int64, typ string) error {
+	log.Infof("OnDeltaStreamOpen... %v  of type %s", id, typ)
+	return nil
+}
+
+func (c *Callbacks) OnStreamDeltaRequest(i int64, request *discoverygrpc.DeltaDiscoveryRequest) error {
+	log.Infof("OnStreamDeltaRequest... %v  of type %s", i, request)
+	return nil
+}
+
+func (c *Callbacks) OnStreamDeltaResponse(i int64, request *discoverygrpc.DeltaDiscoveryRequest, response *discoverygrpc.DeltaDiscoveryResponse) {
+	log.Infof("OnStreamDeltaResponse... %v  of type %s", i, request)
 }
 
 type Callbacks struct {
@@ -135,12 +158,6 @@ func RunManagementServer(ctx context.Context, server serverv3.Server, port uint)
 	// register services
 	discoverygrpc.RegisterAggregatedDiscoveryServiceServer(grpcServer, server)
 
-	// NOT used since we run ADS
-	// endpointservice.RegisterEndpointDiscoveryServiceServer(grpcServer, server)
-	// clusterservice.RegisterClusterDiscoveryServiceServer(grpcServer, server)
-	// routeservice.RegisterRouteDiscoveryServiceServer(grpcServer, server)
-	// listenerservice.RegisterListenerDiscoveryServiceServer(grpcServer, server)
-
 	log.WithFields(log.Fields{"port": port}).Info("management server listening")
 	go func() {
 		if err = grpcServer.Serve(lis); err != nil {
@@ -150,6 +167,29 @@ func RunManagementServer(ctx context.Context, server serverv3.Server, port uint)
 	<-ctx.Done()
 
 	grpcServer.GracefulStop()
+}
+
+// taken from https://github.com/istio/istio/blob/master/pilot/pkg/networking/util/util.go
+func messageToAnyWithError(msg proto.Message) (*anypb.Any, error) {
+	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+	return &anypb.Any{
+		// nolint: staticcheck
+		TypeUrl: "type.googleapis.com/" + string(msg.ProtoReflect().Descriptor().FullName()),
+		Value:   b,
+	}, nil
+}
+
+// MessageToAny converts from proto message to proto Any
+func messageToAny(msg proto.Message) *anypb.Any {
+	out, err := messageToAnyWithError(msg)
+	if err != nil {
+		log.Error(fmt.Sprintf("error marshaling Any %s: %v", prototext.Format(msg), err))
+		return nil
+	}
+	return out
 }
 
 func main() {
@@ -272,6 +312,9 @@ func main() {
 			},
 			HttpFilters: []*hcm.HttpFilter{{
 				Name: wellknown.Router,
+				ConfigType: &hcm.HttpFilter_TypedConfig{
+					TypedConfig: messageToAny(&router.Router{}),
+				},
 			}},
 		}
 
@@ -394,12 +437,20 @@ func main() {
 		atomic.AddInt32(&version, 1)
 		log.Infof(">>>>>>>>>>>>>>>>>>> creating snapshot Version " + fmt.Sprint(version))
 
-		snap := cachev3.NewSnapshot(fmt.Sprint(version), nil, c, nil, l, nil, s)
+		resources := make(map[string][]types.Resource, 3)
+
+		resources[resource.ClusterType] = c
+		resources[resource.ListenerType] = l
+		resources[resource.SecretType] = s
+		snap, err := cachev3.NewSnapshot(fmt.Sprint(version), resources)
+		if err != nil {
+			log.Fatalf("Could not set snapshot %v", err)
+		}
 		if err := snap.Consistent(); err != nil {
 			log.Errorf("snapshot inconsistency: %+v\n%+v", snap, err)
 			os.Exit(1)
 		}
-		err = cache.SetSnapshot(nodeId, snap)
+		err = cache.SetSnapshot(ctx, nodeId, snap)
 		if err != nil {
 			log.Fatalf("Could not set snapshot %v", err)
 		}
