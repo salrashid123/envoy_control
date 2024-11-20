@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_api_v3_auth "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 
 	"github.com/golang/protobuf/ptypes"
@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	endpoint "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
@@ -82,7 +83,7 @@ func (cb *Callbacks) OnStreamOpen(_ context.Context, id int64, typ string) error
 	log.Infof("OnStreamOpen %d open for %s", id, typ)
 	return nil
 }
-func (cb *Callbacks) OnStreamClosed(id int64) {
+func (cb *Callbacks) OnStreamClosed(id int64, n *corev3.Node) {
 	log.Infof("OnStreamClosed %d closed", id)
 }
 func (cb *Callbacks) OnStreamRequest(id int64, r *discoverygrpc.DiscoveryRequest) error {
@@ -116,7 +117,7 @@ func (cb *Callbacks) OnFetchResponse(req *discoverygrpc.DiscoveryRequest, resp *
 	log.Infof("OnFetchResponse... Resquest[%v],  Response[%v]", req.TypeUrl, resp.TypeUrl)
 }
 
-func (cb *Callbacks) OnDeltaStreamClosed(id int64) {
+func (cb *Callbacks) OnDeltaStreamClosed(id int64, n *corev3.Node) {
 	log.Infof("OnDeltaStreamClosed... %v", id)
 }
 
@@ -235,7 +236,7 @@ func main() {
 			},
 		}}
 		uctx := &envoy_api_v3_auth.UpstreamTlsContext{}
-		tctx, err := ptypes.MarshalAny(uctx)
+		tctx, err := anypb.New(uctx)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -243,7 +244,7 @@ func main() {
 		c := []types.Resource{
 			&cluster.Cluster{
 				Name:                 clusterName,
-				ConnectTimeout:       ptypes.DurationProto(2 * time.Second),
+				ConnectTimeout:       durationpb.New(2 * time.Second),
 				ClusterDiscoveryType: &cluster.Cluster_Type{Type: cluster.Cluster_LOGICAL_DNS},
 				DnsLookupFamily:      cluster.Cluster_V4_ONLY,
 				LbPolicy:             cluster.Cluster_ROUND_ROBIN,
@@ -318,16 +319,16 @@ func main() {
 			}},
 		}
 
-		pbst, err := ptypes.MarshalAny(manager)
+		pbst, err := anypb.New(manager)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		priv, err := ioutil.ReadFile("certs/server.key")
+		priv, err := os.ReadFile("certs/server.key")
 		if err != nil {
 			log.Fatal(err)
 		}
-		pub, err := ioutil.ReadFile("certs/server.crt")
+		pub, err := os.ReadFile("certs/server.crt")
 		if err != nil {
 			log.Fatal(err)
 		}

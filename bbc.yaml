@@ -84,4 +84,4 @@ static_resources:
   - name: validation_context
     validation_context:
       trusted_ca:
-        filename: certs/tls-ca-chain.pem
+        filename: certs/root-ca.crt

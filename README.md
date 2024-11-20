@@ -108,13 +108,9 @@ If you just set the value to bbc and not iterate, the code will behave as if [bb
 
 To run envoy, just download a local envoy
 
->> *NOTE* we are using `envoy 1.17`
 
-``` 
+``` bash
    docker cp `docker create envoyproxy/envoy-dev:latest`:/usr/local/bin/envoy .
-
-   ./envoy --version
-   envoy  version: 483dd3007f15e47deed0a29d945ff776abb37815/1.17.0-dev/Clean/RELEASE/BoringSSL
 ```
 
 Then invoke
@@ -128,7 +124,7 @@ Then invoke
 ```bash
 curl  -H "Host: http.domain.com" \
    --resolve  http.domain.com:10000:127.0.0.1 \
-   --cacert certs/tls-ca.crt https://http.domain.com:10000/
+   --cacert certs/root-ca.crt https://http.domain.com:10000/
 ```
 
 ---

@@ -1,22 +1,26 @@
 module main
 
-go 1.17
+go 1.22.7
+
+toolchain go1.22.9
 
 require (
-	github.com/envoyproxy/go-control-plane v0.10.1
-	github.com/golang/protobuf v1.5.2
-	github.com/sirupsen/logrus v1.8.1
-	google.golang.org/grpc v1.46.0-dev
-
+	github.com/envoyproxy/go-control-plane v0.13.1
+	github.com/golang/protobuf v1.5.4
+	github.com/sirupsen/logrus v1.9.3
+	google.golang.org/grpc v1.68.0
+	google.golang.org/protobuf v1.35.2
 )
 
 require (
-	github.com/census-instrumentation/opencensus-proto v0.2.1 // indirect
-	github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1 // indirect
-	github.com/envoyproxy/protoc-gen-validate v0.1.0 // indirect
-	golang.org/x/net v0.0.0-20201021035429-f5854403a974 // indirect
-	golang.org/x/sys v0.0.0-20210119212857-b64e53b001e4 // indirect
-	golang.org/x/text v0.3.3 // indirect
-	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
-	google.golang.org/protobuf v1.27.1 // indirect
+	cel.dev/expr v0.16.1 // indirect
+	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
+	github.com/cncf/xds/go v0.0.0-20240905190251-b4127c9b8d78 // indirect
+	github.com/envoyproxy/protoc-gen-validate v1.1.0 // indirect
+	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
+	golang.org/x/net v0.29.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/text v0.18.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240903143218-8af14fe29dc1 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
 )
